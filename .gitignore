@@ -1,0 +1,31 @@
+# Environment variables
+.env
+.env.example
+backend/.env
+backend/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env/
+
+# Logs
+*.log
+server_log*.txt
+output.txt
+models.txt
+model_list*.txt
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
