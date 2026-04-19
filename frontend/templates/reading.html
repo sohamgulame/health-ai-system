@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Health Monitor - Dashboard{% endblock %}
+{% block page_title %}Health Overview{% endblock %}
+
+{% block content %}
+
+<!-- Welcome Banner -->
+<div class="hero-card dashboard-hero">
+    <div class="hero-content">
+        <div class="hero-badge">🔬 HealthGuard AI</div>
+        <h2>Your Personal Health Monitor</h2>
+        <p>Real-time AI-powered monitoring for your vital signs and health trends</p>
+    </div>
+    <div class="hero-status" id="hero-status">
+        <span class="status-badge online"><span class="pulse-dot"></span> System Online</span>
+    </div>
+</div>
+
+<!-- Quick Stats - Three Column -->
+<div class="quick-stats">
+    <div class="stat-card stat-hr">
+        <div class="stat-header">
+            <span class="stat-icon">❤️</span>
+            <span class="stat-label">Heart Rate</span>
+        </div>
+        <div class="stat-value" id="stat-hr">--</div>
+        <div class="stat-unit">bpm</div>
+        <div class="stat-trend" id="stat-hr-status">Monitoring...</div>
+    </div>
+    
+    <div class="stat-card stat-spo2">
+        <div class="stat-header">
+            <span class="stat-icon">💨</span>
+            <span class="stat-label">Oxygen Level</span>
+        </div>
+        <div class="stat-value" id="stat-spo2">--</div>
+        <div class="stat-unit">%</div>
+        <div class="stat-trend" id="stat-spo2-status">Monitoring...</div>
+    </div>
+    
+    <div class="stat-card stat-temp">
+        <div class="stat-header">
+            <span class="stat-icon">🌡️</span>
+            <span class="stat-label">Temperature</span>
+        </div>
+        <div class="stat-value" id="stat-temp">--</div>
+        <div class="stat-unit">°C</div>
+        <div class="stat-trend" id="stat-temp-status">Monitoring...</div>
+    </div>
+</div>
+
+<!-- Health Status & Device Info -->
+<div class="dashboard-row">
+    <!-- Left: Health Status -->
+    <div class="health-status-card">
+        <div class="card-header">
+            <h3>💚 Overall Health</h3>
+            <span class="card-icon">📊</span>
+        </div>
+        <div class="health-indicator" id="health-status-indicator">
+            <div class="health-circle-wrapper">
+                <div class="health-circle" id="health-circle"></div>
+                <div class="health-circle-glow" id="health-circle-glow"></div>
+            </div>
+            <div class="health-info">
+                <span id="health-text" class="health-status-text">Awaiting Data</span>
+                <p id="health-summary" class="health-status-detail">Connect your ESP32 device to begin monitoring</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right: Device Info -->
+    <div class="device-info-card">
+        <div class="card-header">
+            <h3>⚙️ System Status</h3>
+            <span class="card-icon">🔧</span>
+        </div>
+        <div class="device-list">
+            <div class="device-item">
+                <div class="device-info">
+                    <span class="device-label">System Status</span>
+                    <span class="device-sublabel">Backend Server</span>
+                </div>
+                <span class="device-value success">🟢 Online</span>
+            </div>
+            <div class="device-item">
+                <div class="device-info">
+                    <span class="device-label">ESP32 Device</span>
+                    <span class="device-sublabel">Sensor Hardware</span>
+                </div>
+                <span class="device-value" id="device-status">🔴 Disconnected</span>
+            </div>
+            <div class="device-item">
+                <div class="device-info">
+                    <span class="device-label">Database</span>
+                    <span class="device-sublabel">Data Storage</span>
+                </div>
+                <span class="device-value success">🟢 Connected</span>
+            </div>
+            <div class="device-item">
+                <div class="device-info">
+                    <span class="device-label">AI Service</span>
+                    <span class="device-sublabel">NVIDIA API</span>
+                </div>
+                <span class="device-value success">🟢 Active</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity & Recommendations -->
+<div class="dashboard-row">
+    <!-- Left: Recent Readings -->
+    <div class="recent-readings-card">
+        <div class="card-header">
+            <h3>📈 Recent Readings</h3>
+            <span class="card-icon">⏱️</span>
+        </div>
+        <div class="reading-list" id="recent-readings">
+            <p style="color: var(--text-muted); text-align: center; padding: 20px;">No recent data</p>
+        </div>
+    </div>
+    
+    <!-- Right: Quick Recommendations -->
+    <div class="recommendations-card">
+        <div class="card-header">
+            <h3>💡 Health Tips</h3>
+            <span class="card-icon">✨</span>
+        </div>
+        <ul class="tips-list">
+            <li><span class="tip-icon">📱</span> Keep your ESP32 device charged and connected</li>
+            <li><span class="tip-icon">⏰</span> Monitor readings at consistent times daily</li>
+            <li><span class="tip-icon">🔬</span> Check the Analysis tab for detailed AI insights</li>
+            <li><span class="tip-icon">📊</span> Review your Report for health trends</li>
+            <li><span class="tip-icon">⚕️</span> Contact healthcare if abnormal readings persist</li>
+        </ul>
+    </div>
+</div>
+
+<!-- Action Buttons -->
+<div class="dashboard-actions">
+    <a href="/analysis" class="btn-premium btn-premium-primary action-btn">
+        <span class="btn-icon">🔬</span> View AI Analysis
+    </a>
+    <a href="/report" class="btn-premium btn-premium-secondary action-btn">
+        <span class="btn-icon">📊</span> View Health Reports
+    </a>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelector('.nav-item[href="/reading"]').classList.add('active');
+    
+    // Update dashboard every 2 seconds
+    setInterval(updateDashboard, 2000);
+    updateDashboard();
+    
+    async function updateDashboard() {
+        try {
+            const response = await fetch('/api/latest');
+            const data = await response.json();
+            
+            // Update stat cards
+            const temp = data.temperature !== undefined && data.temperature !== '--' ? parseFloat(data.temperature) : null;
+            const hr = data.heart_rate !== undefined && data.heart_rate !== '--' ? parseInt(data.heart_rate) : null;
+            const spo2 = data.spo2 !== undefined && data.spo2 !== '--' ? parseInt(data.spo2) : null;
+            
+            document.getElementById('stat-hr').innerText = hr !== null ? hr : '--';
+            document.getElementById('stat-spo2').innerText = spo2 !== null ? spo2 : '--';
+            document.getElementById('stat-temp').innerText = temp !== null ? temp.toFixed(1) : '--';
+            
+            // Update status indicators
+            updateStatusIndicator('stat-hr-status', hr, 60, 100, 'bpm');
+            updateStatusIndicator('stat-spo2-status', spo2, 95, 100, '%');
+            updateStatusIndicator('stat-temp-status', temp, 36.5, 37.5, '°C');
+            
+            // Update health status
+            updateHealthStatus(temp, hr, spo2);
+            
+            // Update device status based on data freshness
+            const deviceStatus = document.getElementById('device-status');
+            const now = data.server_time ? new Date(data.server_time) : new Date();
+            const lastSeen = data.timestamp ? new Date(data.timestamp) : null;
+            
+            // If data is older than 45 seconds, consider it disconnected
+            const isFresh = lastSeen && (now - lastSeen) < 45000;
+            
+            if (isFresh && (temp !== null || hr !== null || spo2 !== null)) {
+                deviceStatus.innerHTML = '🟢 Connected';
+                deviceStatus.classList.add('success');
+                document.getElementById('stat-hr').style.opacity = '1';
+                document.getElementById('stat-spo2').style.opacity = '1';
+                document.getElementById('stat-temp').style.opacity = '1';
+            } else {
+                deviceStatus.innerHTML = '🔴 Disconnected';
+                deviceStatus.classList.remove('success');
+                
+                // Dim values if disconnected
+                if (!isFresh) {
+                    document.getElementById('stat-hr').style.opacity = '0.5';
+                    document.getElementById('stat-spo2').style.opacity = '0.5';
+                    document.getElementById('stat-temp').style.opacity = '0.5';
+                }
+            }
+            
+            // Fetch and display recent readings
+            updateRecentReadings();
+            
+        } catch (error) {
+            console.error("Dashboard update error:", error);
+        }
+    }
+    
+    function updateStatusIndicator(elementId, value, ideal_min, ideal_max, unit) {
+        const el = document.getElementById(elementId);
+        if (value === null) {
+            el.innerText = 'Waiting...';
+            el.style.color = 'var(--text-muted)';
+        } else if (value >= ideal_min && value <= ideal_max) {
+            el.innerText = '✓ Healthy';
+            el.style.color = '#10b981';
+        } else if (Math.abs(value - ideal_min) < 5 || Math.abs(value - ideal_max) < 5) {
+            el.innerText = '⚠ Caution';
+            el.style.color = '#f59e0b';
+        } else {
+            el.innerText = '⚠ Alert';
+            el.style.color = '#dc2626';
+        }
+    }
+    
+    function updateHealthStatus(temp, hr, spo2) {
+        const circle = document.getElementById('health-circle');
+        const text = document.getElementById('health-text');
+        const summary = document.getElementById('health-summary');
+        
+        if (temp === null || hr === null || spo2 === null) {
+            circle.style.backgroundColor = '#cbd5e1';
+            text.innerText = 'No Data';
+            summary.innerText = 'Awaiting sensor data from your ESP32 device...';
+            return;
+        }
+        
+        let status = 'Healthy';
+        let color = '#10b981';
+        let alerts = [];
+        
+        if (temp < 36 || temp > 38) { status = 'Caution'; color = '#f59e0b'; alerts.push('Temperature abnormal'); }
+        if (hr < 60 || hr > 100) { status = 'Caution'; color = '#f59e0b'; alerts.push('Heart rate irregular'); }
+        if (spo2 < 95) { status = 'Alert'; color = '#dc2626'; alerts.push('Low oxygen level'); }
+        
+        circle.style.backgroundColor = color;
+        text.innerText = status;
+        summary.innerText = alerts.length > 0 ? alerts.join(' • ') : '✓ All vitals in normal range';
+    }
+    
+    async function updateRecentReadings() {
+        try {
+            const response = await fetch('/api/report?page=1&limit=5');
+            const result = await response.json();
+            const data = result.data || [];
+            
+            const container = document.getElementById('recent-readings');
+            if (data.length > 0) {
+                container.innerHTML = data.map(item => `
+                    <div class="reading-item">
+                        <div class="reading-time">${item.timestamp ? item.timestamp.split(' ')[1] : 'N/A'}</div>
+                        <div class="reading-stats">
+                            <span>${item.temperature}°C</span>
+                            <span>${item.heart_rate} bpm</span>
+                            <span>${item.spo2}%</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        } catch (error) {
+            console.error("Error fetching recent readings:", error);
+        }
+    }
+</script>
+{% endblock %}

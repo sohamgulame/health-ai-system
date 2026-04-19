@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<!-- jsPDF Library for rendering PDF files -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+{% endblock %}
+
+{% block title %}Health Monitor - Records{% endblock %}
+{% block page_title %}Patient Records{% endblock %}
+
+{% block content %}
+<div class="sensor-feed-card full-width">
+    <div class="card-header-flex">
+        <div>
+            <h3>Health Records</h3>
+            <!-- <p class="record-subtitle">Last 20 readings</p> -->
+        </div>
+        <div class="button-group">
+            <button class="btn-premium btn-premium-primary" onclick="downloadPDF()">
+                <span class="btn-icon">📥</span> Export PDF Report
+            </button>
+            <a href="/manual-reading" class="btn-premium btn-premium-secondary">
+                <span class="btn-icon">🏠</span> Go to Reading
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="report-summary">
+        <div class="summary-stat">
+            <span class="summary-label">Total Readings</span>
+            <span class="summary-value" id="total-readings">0</span>
+        </div>
+        <div class="summary-stat">
+            <span class="summary-label">Avg Temp</span>
+            <span class="summary-value" id="avg-temp">--</span>
+        </div>
+        <div class="summary-stat">
+            <span class="summary-label">Avg HR</span>
+            <span class="summary-value" id="avg-hr">--</span>
+        </div>
+        <div class="summary-stat">
+            <span class="summary-label">Avg SpO2</span>
+            <span class="summary-value" id="avg-spo2">--</span>
+        </div>
+    </div>
+
+    <div class="table-responsive" style="margin-top: 24px;">
+        <table id="report-table" class="modern-table compact-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Time</th>
+                    <th>Temp</th>
+                    <th>HR</th>
+                    <th>SpO2</th>
+                    <th class="col-prediction">Status</th>
+                </tr>
+            </thead>
+            <tbody id="report-body">
+                <tr>
+                    <td colspan="6" style="text-align: center; color: #64748b; padding: 32px 0;">Loading...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls">
+        <button class="btn-pagination" id="prev-btn" onclick="goToPreviousPage()">← Previous</button>
+        <span class="pagination-info" id="page-info">Page 1</span>
+        <button class="btn-pagination" id="next-btn" onclick="goToNextPage()">Next →</button>
+    </div>
+</div>
+
+<!-- Expanded Details Modal -->
+<div id="detail-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <h3>Detailed Reading</h3>
+        <div id="modal-body"></div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelector('.nav-item[href="/report"]').classList.add('active');
+    fetchReportData();
+
+    function closeModal() {
+        document.getElementById('detail-modal').style.display = 'none';
+    }
+
+    function showDetail(index) {
+        document.getElementById('detail-modal').style.display = 'flex';
+    }
+</script>
+{% endblock %}

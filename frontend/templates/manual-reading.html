@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}ESP32 Reading - Health Monitor{% endblock %}
+{% block page_title %}ESP32 Live Reading{% endblock %}
+
+{% block content %}
+
+<!-- Header Banner -->
+<div class="hero-card reading-hero">
+    <div class="hero-content">
+        <div class="hero-badge"> ESP32 Sensor Data</div>
+        <h2>Live ESP32 Reading</h2>
+        <p>Real-time vital signs from your ESP32 device with instant AI analysis</p>
+    </div>
+</div>
+
+<!-- Reading Display Section -->
+<div class="reading-container">
+    <!-- Current Readings -->
+    <div class="reading-form-card">
+        <h3><span id="title-icon">🔴</span> Current Sensor Data <small id="connection-status" style="font-size: 12px; margin-left: 10px; font-weight: 500;"></small></h3>
+
+        <div class="esp32-readings">
+            <!-- Temperature -->
+            <div class="reading-display-item">
+                <div class="reading-label">
+                    <span class="reading-icon">🌡️</span>
+                    <span>Temperature</span>
+                </div>
+                <div class="reading-value" id="esp32-temp">--</div>
+                <div class="reading-unit">°C</div>
+                <div class="reading-hint">Normal: 36.5 - 37.5°C</div>
+            </div>
+
+            <!-- Heart Rate -->
+            <div class="reading-display-item">
+                <div class="reading-label">
+                    <span class="reading-icon">❤️</span>
+                    <span>Heart Rate</span>
+                </div>
+                <div class="reading-value" id="esp32-hr">--</div>
+                <div class="reading-unit">bpm</div>
+                <div class="reading-hint">Normal: 60 - 100 bpm</div>
+            </div>
+
+            <!-- SpO2 -->
+            <div class="reading-display-item">
+                <div class="reading-label">
+                    <span class="reading-icon">💨</span>
+                    <span>Oxygen Level</span>
+                </div>
+                <div class="reading-value" id="esp32-spo2">--</div>
+                <div class="reading-unit">%</div>
+                <div class="reading-hint">Normal: 95 - 100%</div>
+            </div>
+
+            <!-- Last Updated -->
+            <div class="reading-display-item last-updated">
+                <div class="reading-label">
+                    <span class="reading-icon">⏰</span>
+                    <span>Last Updated</span>
+                </div>
+                <div class="reading-value" id="esp32-time">--</div>
+            </div>
+        </div>
+
+        <!-- Action Buttons centered -->
+        <div class="reading-actions" style="display: flex; justify-content: center; gap: 16px; margin-top: 32px;">
+            <button class="btn-premium btn-premium-secondary" id="refreshBtn" onclick="manualRefresh()">
+                <span class="btn-icon">🔄</span>
+                Refresh
+            </button>
+            <button class="btn-premium btn-premium-primary" id="analyzeBtn" onclick="analyzeESP32Reading()">
+                <span class="btn-icon">🔬</span>
+                Analyze Reading
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+        <div class="loading-spinner">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        <p>Analyzing your reading...</p>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelector('.nav-item[href="/manual-reading"]')?.classList.add('active');
+
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    let latestReading = null;
+
+    // Auto-refresh every 3 seconds
+    setInterval(refreshReading, 3000);
+    refreshReading();
+
+    async function manualRefresh() {
+        const btn = document.getElementById('refreshBtn');
+        const icon = btn.querySelector('.btn-icon');
+        const originalText = btn.innerHTML;
+
+        try {
+            // Visual feedback
+            btn.classList.add('loading');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="btn-icon">⏳</span> Refreshing...';
+            
+            await refreshReading();
+            
+            // Animation success
+            btn.innerHTML = '<span class="btn-icon">✅</span> Updated';
+            setTimeout(() => {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }, 1000);
+
+        } catch (error) {
+            console.error('Manual refresh failed:', error);
+            btn.innerHTML = '<span class="btn-icon">❌</span> Error';
+            setTimeout(() => {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }, 1000);
+        }
+    }
+
+    async function refreshReading() {
+        try {
+            const response = await fetch('/api/latest');
+            if (!response.ok) throw new Error('Network response was not ok');
+            const data = await response.json();
+
+            // Connection status check
+            const statusText = document.getElementById('connection-status');
+            const titleIcon = document.getElementById('title-icon');
+            const now = data.server_time ? new Date(data.server_time) : new Date();
+            const lastSeen = data.timestamp ? new Date(data.timestamp) : null;
+            const isFresh = lastSeen && (now - lastSeen) < 45000;
+
+            if (isFresh) {
+                statusText.textContent = '(Live)';
+                statusText.style.color = '#10b981';
+                titleIcon.textContent = '🟢';
+                // Reset opacity
+                document.querySelectorAll('.reading-display-item').forEach(el => el.style.opacity = '1');
+            } else {
+                statusText.textContent = '(Offline)';
+                statusText.style.color = '#64748b';
+                titleIcon.textContent = '🔴';
+                // Dim values
+                document.querySelectorAll('.reading-display-item:not(.last-updated)').forEach(el => el.style.opacity = '0.5');
+            }
+
+            if (data && data.temperature !== undefined) {
+                // If the data is valid numeric data, store it
+                const isRealData = data.temperature !== '--' && data.heart_rate !== '--';
+                
+                if (isRealData) {
+                    latestReading = data;
+
+                    // Update display values with animation
+                    updateValueWithAnimation('esp32-temp', parseFloat(data.temperature).toFixed(1));
+                    updateValueWithAnimation('esp32-hr', parseInt(data.heart_rate));
+                    updateValueWithAnimation('esp32-spo2', parseInt(data.spo2));
+
+                    // Format time
+                    if (data.timestamp) {
+                        const time = data.timestamp.split(' ')[1] || data.timestamp;
+                        document.getElementById('esp32-time').textContent = time;
+                    } else {
+                        document.getElementById('esp32-time').textContent = new Date().toLocaleTimeString();
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching ESP32 data:', error);
+        }
+    }
+
+    function updateValueWithAnimation(id, value) {
+        const el = document.getElementById(id);
+        if (el.textContent === value.toString()) return;
+
+        el.style.transform = 'scale(1.1)';
+        el.style.opacity = '0.5';
+
+        setTimeout(() => {
+            el.textContent = value;
+            el.style.transform = 'scale(1)';
+            el.style.opacity = '1';
+        }, 150);
+    }
+
+    async function analyzeESP32Reading() {
+        if (!latestReading) {
+            alert('No ESP32 data available. Please wait for the device to send data.');
+            return;
+        }
+
+        const temp = parseFloat(latestReading.temperature);
+        const hr = parseInt(latestReading.heart_rate);
+        const spo2 = parseInt(latestReading.spo2);
+
+        // Show loading
+        loadingOverlay.style.display = 'flex';
+
+        try {
+            const response = await fetch('/api/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    temperature: temp,
+                    heart_rate: hr,
+                    spo2: spo2
+                })
+            });
+
+            const data = await response.json();
+
+            // After successful analysis, redirect to the full analysis page
+            setTimeout(() => {
+                window.location.href = '/analysis';
+            }, 300);
+
+        } catch (error) {
+            console.error('Error analyzing reading:', error);
+            alert('Error analyzing reading. Please try again.');
+        } finally {
+            loadingOverlay.style.display = 'none';
+        }
+    }
+</script>
+{% endblock %}

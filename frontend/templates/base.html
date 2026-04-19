@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Health Guard Dashboard{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='esp32-reading.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+
+<body>
+    <div class="layout-wrapper">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <a href="/reading" class="brand" style="text-decoration: none; color: inherit;">
+                <span class="logo-icon">♡</span>
+                <span>HealthGuard</span>
+            </a>
+            <nav class="nav-menu">
+                <a href="/reading" class="nav-item">
+                    <span class="icon"></span> Overview
+                </a>
+                <a href="/manual-reading" class="nav-item">
+                    <span class="icon"></span> Live Reading
+                </a>
+                <a href="/analysis" class="nav-item">
+                    <span class="icon"></span> AI Analysis
+                </a>
+                <a href="/report" class="nav-item">
+                    <span class="icon"></span> Health Records
+                </a>
+            </nav>
+            <div class="user-profile">
+                <div class="avatar" id="avatar-icon">U</div>
+                <div class="user-info">
+                    <span class="name" id="user-name-display">User</span>
+                    <span class="role">Patient</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="page-title-outer">
+                    <h1 class="page-title">{% block page_title %}Welcome Back{% endblock %}</h1>
+                </div>
+                <div class="top-actions">
+                    <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️</button>
+                    <button class="btn-primary" onclick="handleLogout()">Log Out</button>
+                </div>
+            </header>
+
+            <div class="content-area">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        // Set initial theme before DOM loads to prevent flash
+        const savedTheme = localStorage.getItem('health_theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+
+        // Update user profile dynamically
+        document.addEventListener('DOMContentLoaded', () => {
+            const btn = document.getElementById('theme-btn');
+            if (btn) btn.innerText = savedTheme === 'dark' ? '🌙' : '☀️';
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                let urlUsername = urlParams.get('username');
+
+                if (urlUsername) {
+                    let displayName = urlUsername.split('@')[0];
+                    if (displayName && displayName.length > 0) {
+                        displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+                        localStorage.setItem('health_username', displayName);
+                    }
+                }
+
+                const savedUser = localStorage.getItem('health_username');
+                if (savedUser) {
+                    const nameEl = document.getElementById('user-name-display');
+                    const avatarEl = document.getElementById('avatar-icon');
+                    if (nameEl) nameEl.innerText = savedUser;
+                    if (avatarEl) avatarEl.innerText = savedUser.charAt(0).toUpperCase();
+                }
+            } catch (e) {
+                console.error("Error setting custom profile:", e);
+            }
+        });
+
+        function handleLogout() {
+            localStorage.removeItem('health_username');
+            window.location.href = '/';
+        }
+
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('health_theme', newTheme);
+            const btn = document.getElementById('theme-btn');
+            if (btn) btn.innerText = newTheme === 'dark' ? '🌙' : '☀️';
+        }
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+
+</html>

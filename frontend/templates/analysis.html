@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Health Monitor - Analysis{% endblock %}
+{% block page_title %}AI Clinical Analysis{% endblock %}
+
+{% block content %}
+
+<!-- Status Card -->
+<div class="status-card analysis-status">
+    <div class="status-header">
+        <h3>Live Health Status</h3>
+        <span class="health-indicator" id="health-badge">•</span>
+    </div>
+    <div class="vital-grid">
+        <div class="vital-item">
+            <span class="vital-label">Temperature</span>
+            <span class="vital-value" id="temp-val">--</span><span class="vital-unit">°C</span>
+        </div>
+        <div class="vital-item">
+            <span class="vital-label">Heart Rate</span>
+            <span class="vital-value" id="hr-val">--</span><span class="vital-unit">bpm</span>
+        </div>
+        <div class="vital-item">
+            <span class="vital-label">SpO2</span>
+            <span class="vital-value" id="spo2-val">--</span><span class="vital-unit">%</span>
+        </div>
+    </div>
+</div>
+
+<!-- Analysis Cards - Three Section Layout -->
+<div class="analysis-grid">
+    <!-- Card 1: Prediction -->
+    <div class="analysis-card prediction-card">
+        <div class="card-icon">📊</div>
+        <h4>Health Prediction</h4>
+        <div class="card-content">
+            <p id="prediction-val" class="analysis-text">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Card 2: Diagnosis -->
+    <div class="analysis-card diagnosis-card">
+        <div class="card-icon">🔬</div>
+        <h4>Disease Possibility</h4>
+        <div class="card-content">
+            <p id="diagnosis-val" class="analysis-text">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Card 3: Advice -->
+    <div class="analysis-card advice-card">
+        <div class="card-icon">💡</div>
+        <h4>Recommendations</h4>
+        <div class="card-content">
+            <p id="advice-val" class="analysis-text">Loading...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Explanation Section -->
+<div class="sensor-feed-card explanation-section">
+    <h4>📝 Medical Explanation</h4>
+    <p id="explanation-val" class="explanation-text">Loading...</p>
+</div>
+
+<!-- Action Buttons -->
+<div class="action-buttons">
+    <a href="/report" class="btn-premium btn-premium-primary">
+        <span class="btn-icon">📊</span> View Full Health Report
+    </a>
+    <a href="/manual-reading" class="btn-premium btn-premium-secondary">
+        <span class="btn-icon">🏠</span> Go to Reading
+    </a>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelector('.nav-item[href="/analysis"]').classList.add('active');
+    
+    async function fetchAnalysisData() {
+        try {
+            const response = await fetch('/api/latest-analysis');
+            const data = await response.json();
+            
+            if (data.error) {
+                console.warn('No analysis available yet');
+                return;
+            }
+            
+            // Update Vitals
+            document.getElementById('temp-val').textContent = data.temperature !== '--' ? parseFloat(data.temperature).toFixed(1) : '--';
+            document.getElementById('hr-val').textContent = data.heart_rate;
+            document.getElementById('spo2-val').textContent = data.spo2;
+            
+            // Update Analysis Cards
+            document.getElementById('prediction-val').textContent = data.prediction || 'No data';
+            document.getElementById('diagnosis-val').textContent = data.diagnosis || 'Analysis pending';
+            document.getElementById('advice-val').textContent = data.advice || 'Waiting for data';
+            document.getElementById('explanation-val').textContent = data.explanation || 'No medical explanation available yet.';
+            
+            // Update indicators
+            const badge = document.getElementById('health-badge');
+            const prediction = (data.prediction || '').toLowerCase();
+            if (prediction.includes('healthy')) badge.style.color = '#10b981';
+            else if (prediction.includes('caution')) badge.style.color = '#f59e0b';
+            else if (prediction.includes('critical')) badge.style.color = '#dc2626';
+            else badge.style.color = '#10b981'; // Default to healthy color if diagnosis is present
+
+        } catch (error) {
+            console.error('Error fetching analysis data:', error);
+            document.querySelectorAll('.analysis-text').forEach(el => el.textContent = 'Error loading analysis');
+        }
+    }
+    
+    fetchAnalysisData();
+</script>
+{% endblock %}
