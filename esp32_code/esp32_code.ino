@@ -10,6 +10,7 @@ const char* WIFI_SSID = "TP-Link_8114";
 const char* WIFI_PASSWORD = "17934602";
 
 const char* SERVER_URL = "http://192.168.0.101:5000/api/health-data";
+const int USER_ID = 1; // Update this to match your User ID from the dashboard
 
 const int ONE_WIRE_BUS = 4;
 const unsigned long POST_INTERVAL_MS = 10000;
@@ -130,6 +131,7 @@ void sendHealthReading() {
   }
 
   String payload = "{";
+  payload += "\"user_id\":" + String(USER_ID) + ",";
   payload += "\"spo2\":" + String(spo2) + ",";
   payload += "\"heart_rate\":" + String(heartRate) + ",";
   payload += "\"temperature\":" + String(temperatureC, 2);

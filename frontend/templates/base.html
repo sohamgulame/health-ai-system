@@ -33,9 +33,9 @@
                 </a>
             </nav>
             <div class="user-profile">
-                <div class="avatar" id="avatar-icon">U</div>
+                <div class="avatar" id="avatar-icon">{{ session.get('username', 'U')[0].upper() if session.get('username') else 'U' }}</div>
                 <div class="user-info">
-                    <span class="name" id="user-name-display">User</span>
+                    <span class="name" id="user-name-display">{{ session.get('username', 'User') }}</span>
                     <span class="role">Patient</span>
                 </div>
             </div>
@@ -69,33 +69,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             const btn = document.getElementById('theme-btn');
             if (btn) btn.innerText = savedTheme === 'dark' ? '🌙' : '☀️';
-            try {
-                const urlParams = new URLSearchParams(window.location.search);
-                let urlUsername = urlParams.get('username');
-
-                if (urlUsername) {
-                    let displayName = urlUsername.split('@')[0];
-                    if (displayName && displayName.length > 0) {
-                        displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
-                        localStorage.setItem('health_username', displayName);
-                    }
-                }
-
-                const savedUser = localStorage.getItem('health_username');
-                if (savedUser) {
-                    const nameEl = document.getElementById('user-name-display');
-                    const avatarEl = document.getElementById('avatar-icon');
-                    if (nameEl) nameEl.innerText = savedUser;
-                    if (avatarEl) avatarEl.innerText = savedUser.charAt(0).toUpperCase();
-                }
-            } catch (e) {
-                console.error("Error setting custom profile:", e);
-            }
         });
 
         function handleLogout() {
-            localStorage.removeItem('health_username');
-            window.location.href = '/';
+            window.location.href = '/api/logout';
         }
 
         function toggleTheme() {

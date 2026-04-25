@@ -1,11 +1,13 @@
 import os
 import json
 import traceback
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
 from flask_cors import CORS
 import mysql.connector
 from dotenv import load_dotenv
 from openai import OpenAI
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
 load_dotenv()
 
 # Point Flask to the new frontend directory
@@ -15,7 +17,18 @@ frontend_dir = os.path.join(base_dir, '..', 'frontend')
 app = Flask(__name__, 
             template_folder=os.path.join(frontend_dir, 'templates'),
             static_folder=os.path.join(frontend_dir, 'static'))
+app.secret_key = os.getenv("SECRET_KEY", "super-secret-key-for-health-ai")
 CORS(app)
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            if request.path.startswith('/api/'):
+                return jsonify({"error": "Unauthorized"}), 401
+            return redirect(url_for('login_page'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # NVIDIA Configuration
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
@@ -30,7 +43,7 @@ def get_db_connection():
             host=os.getenv("DB_HOST", "localhost"),
             user=os.getenv("DB_USER", "root"),
             password=os.getenv("DB_PASSWORD", ""),
-            database=os.getenv("DB_NAME", "health_iot_db")
+            database=os.getenv("DB_NAME", "health_db")
         )
     except mysql.connector.Error as err:
         print(f"DB Connection Error: {err}")
@@ -72,10 +85,15 @@ Return ONLY a valid JSON string with these exactly keys: "prediction", "diagnosi
             
         parsed = json.loads(text.strip())
         
-        # Ensure all fields are strings, not lists
+        # Ensure all fields are strings, not lists or dicts, for MySQL compatibility
         for key in ["advice", "prediction", "explanation", "diagnosis"]:
-            if isinstance(parsed.get(key), list):
-                parsed[key] = "\n".join(str(item) for item in parsed[key])
+            val = parsed.get(key)
+            if isinstance(val, list):
+                parsed[key] = "\n".join(str(item) for item in val)
+            elif isinstance(val, dict):
+                parsed[key] = json.dumps(val)
+            else:
+                parsed[key] = str(val) if val is not None else "N/A"
             
         return parsed
     except Exception as e:
@@ -92,30 +110,111 @@ Return ONLY a valid JSON string with these exactly keys: "prediction", "diagnosi
 
 @app.route("/")
 def index():
+    if 'user_id' in session:
+        return redirect(url_for("reading_page"))
+    return redirect(url_for("login_page"))
+
+@app.route("/login")
+def login_page():
     return render_template("login.html")
+
+@app.route("/signup")
+def signup_page():
+    return render_template("signup.html")
+
+@app.route("/api/signup", methods=["POST"])
+def signup():
+    data = request.json
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+
+    if not username or not email or not password:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    db = get_db_connection()
+    if not db:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = db.cursor()
+        # Check if user already exists
+        cursor.execute("SELECT id FROM users WHERE username = %s OR email = %s", (username, email))
+        if cursor.fetchone():
+            return jsonify({"error": "Username or Email already exists"}), 400
+
+        password_hash = generate_password_hash(password)
+        cursor.execute("INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s)",
+                       (username, email, password_hash))
+        db.commit()
+        cursor.close()
+        db.close()
+        return jsonify({"message": "User created successfully"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    data = request.json
+    username = data.get("username")
+    password = data.get("password")
+
+    if not username or not password:
+        return jsonify({"error": "Missing fields"}), 400
+
+    db = get_db_connection()
+    if not db:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+        user = cursor.fetchone()
+        cursor.close()
+        db.close()
+
+        if user and check_password_hash(user['password_hash'], password):
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            return jsonify({"message": "Login successful", "username": user['username']}), 200
+        else:
+            return jsonify({"error": "Invalid username or password"}), 401
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
 
 @app.route("/home")
 @app.route("/dashboard")
+@login_required
 def home():
     return redirect(url_for("reading_page"))
 
 @app.route("/index")
+@login_required
 def index_redirect():
     return redirect(url_for("reading_page"))
 
 @app.route("/reading")
+@login_required
 def reading_page():
     return render_template("reading.html")
 
 @app.route("/manual-reading")
+@login_required
 def manual_reading_page():
     return render_template("manual-reading.html")
 
 @app.route("/analysis")
+@login_required
 def analysis_page():
     return render_template("analysis.html")
 
 @app.route("/report")
+@login_required
 def report_page():
     return render_template("report.html")
 
@@ -140,12 +239,13 @@ def analyze_reading():
         db = get_db_connection()
         if db:
             cursor = db.cursor()
-            sql = "INSERT INTO readings (temperature, heart_rate, spo2, prediction, diagnosis, explanation, advice) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-            val = (temp, hr, spo2, 
-                   ai_response.get("prediction", "N/A"), 
-                   ai_response.get("diagnosis", "N/A"), 
-                   ai_response.get("explanation", "N/A"), 
-                   ai_response.get("advice", "N/A"))
+            user_id = session.get('user_id')
+            sql = "INSERT INTO readings (user_id, temperature, heart_rate, spo2, prediction, diagnosis, explanation, advice) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+            val = (user_id, temp, hr, spo2, 
+                   str(ai_response.get("prediction", "N/A")), 
+                   str(ai_response.get("diagnosis", "N/A")), 
+                   str(ai_response.get("explanation", "N/A")), 
+                   str(ai_response.get("advice", "N/A")))
             cursor.execute(sql, val)
             db.commit()
             cursor.close()
@@ -175,15 +275,14 @@ def receive_health_data():
         db = get_db_connection()
         if db:
             cursor = db.cursor()
-            # We insert a 'live' record that doesn't have a diagnosis yet.
-            # This makes it show on Live Reading but NOT in the permanent Health Records.
-            sql = "INSERT INTO readings (temperature, heart_rate, spo2, prediction, advice) VALUES (%s, %s, %s, %s, %s)"
-            val = (temp, hr, spo2, "Live Monitoring", "Click Analyze for full report")
+            # For live data from ESP32, we check if user_id is provided in the payload.
+            # If not, we fall back to session user_id (for manual/web submissions).
+            user_id = data.get('user_id') or session.get('user_id')
+            
+            sql = "INSERT INTO readings (user_id, temperature, heart_rate, spo2, prediction, advice) VALUES (%s, %s, %s, %s, %s, %s)"
+            val = (user_id, temp, hr, spo2, "Live Monitoring", "Click Analyze for full report")
             cursor.execute(sql, val)
             db.commit()
-            
-            # OPTIONAL: Delete older 'un-analyzed' readings to keep DB small
-            # Only keep the last 50 raw readings or just the latest? Let's keep it simple for now.
             
             cursor.close()
             db.close()
@@ -201,8 +300,10 @@ def get_latest_analysis():
         
     try:
         cursor = db.cursor(dictionary=True)
-        # Search specifically for the latest record with a diagnosis (analyzed)
-        cursor.execute("SELECT * FROM readings WHERE diagnosis IS NOT NULL AND diagnosis != '' ORDER BY id DESC LIMIT 1")
+        user_id = session.get('user_id')
+        
+        # Search specifically for the latest record with a diagnosis (analyzed) for this user
+        cursor.execute("SELECT * FROM readings WHERE user_id = %s AND diagnosis IS NOT NULL AND diagnosis != '' ORDER BY id DESC LIMIT 1", (user_id,))
         result = cursor.fetchone()
         cursor.close()
         db.close()
@@ -225,7 +326,8 @@ def get_latest_data():
         
     try:
         cursor = db.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM readings ORDER BY id DESC LIMIT 1")
+        user_id = session.get('user_id')
+        cursor.execute("SELECT * FROM readings WHERE user_id = %s ORDER BY id DESC LIMIT 1", (user_id,))
         result = cursor.fetchone()
         cursor.close()
         db.close()
@@ -265,6 +367,7 @@ def get_report_data():
         return jsonify({"error": "Database connection failed"}), 500
         
     try:
+        user_id = session.get('user_id')
         # Get pagination parameters
         page = request.args.get('page', 1, type=int)
         limit = request.args.get('limit', 10, type=int)
@@ -272,12 +375,12 @@ def get_report_data():
         
         cursor = db.cursor(dictionary=True)
         
-        # Get total count of ANALYZED readings only
-        cursor.execute("SELECT COUNT(*) as total FROM readings WHERE diagnosis IS NOT NULL AND diagnosis != ''")
+        # Get total count of ANALYZED readings for this user
+        cursor.execute("SELECT COUNT(*) as total FROM readings WHERE user_id = %s AND diagnosis IS NOT NULL AND diagnosis != ''", (user_id,))
         total = cursor.fetchone()['total']
         
-        # Fetch paginated ANALYZED data
-        cursor.execute("SELECT * FROM readings WHERE diagnosis IS NOT NULL AND diagnosis != '' ORDER BY id DESC LIMIT %s OFFSET %s", (limit, offset))
+        # Fetch paginated ANALYZED data for this user
+        cursor.execute("SELECT * FROM readings WHERE user_id = %s AND diagnosis IS NOT NULL AND diagnosis != '' ORDER BY id DESC LIMIT %s OFFSET %s", (user_id, limit, offset))
         results = cursor.fetchall()
         cursor.close()
         db.close()
